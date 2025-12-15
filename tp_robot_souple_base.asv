@@ -88,12 +88,49 @@ v(:,1) = v0;
 f=zeros(2*nx,length(time0));
 %%
 % Better PID implementation with proper initialization
+% iepsilon_t = 0;
+% epsilon_prev = 0;
+% 
+% for step = 2:nstep+1
+%     % Measurement with noise
+%     ub_t = u(induB,step-1) ;
+% 
+%     % Reference signal (step input)
+%     e_t = 1; % Heaviside step function
+% 
+%     % Error calculation
+%     epsilon_t = e_t - ub_t;
+% 
+%     % Derivative (backward difference)
+%     if step > 2
+%         depsilon_t = (epsilon_t - epsilon_prev)/delta;
+%     else
+%         depsilon_t = 0;
+%     end
+% 
+%     % Integral
+%     iepsilon_t = iepsilon_t + delta * epsilon_t;
+% 
+%     % PID control
+%     fA = Kp*epsilon_t + Ki*iepsilon_t + Kd*depsilon_t + fpert(step);
+% 
+%     % Update force vector
+%     f(induA,step) = fA;
+% 
+%     % Store previous error
+%     epsilon_prev = epsilon_t;
+% 
+%     % Newmark integration
+%     [u(:,step), v(:,step), a(:,step)] = newmark1stepMRHS(...
+%         M, C, K, f(:,step), u(:,step-1), v(:,step-1), a(:,step-1), delta, beta, gamma);
+% end
+
 
 %%
 B=Bconstruct(M,C,K,nA,delta,beta,gamma);
 %%
 F=Fconstruct(M,C,K,delta,beta,gamma);
-H=zeros(1,3*ndo1); H(induB)=1;
+H=zeros(nx,1);
 H(1,1)=1;
 %%
 
@@ -125,23 +162,15 @@ for step = 2:nstep+1
     u(:,step-1) = x_pred(1:ndo1);
     v(:,step-1) = x_pred(ndo1+1:2*ndo1);
     a(:,step-1) = x_pred(2*ndo1+1:end);
-   % --- Update force vector with perturbation ---
-f_k(induA) = f_k(induA) + fpert(step); % Add perturbation at point A
-    
+
     % Newmark integration
     [u(:,step), v(:,step), a(:,step)] = newmark1stepMRHS(...
         M, C, K, f_k, u(:,step-1), v(:,step-1), a(:,step-1), delta, beta, gamma);
-    
- x=[u(:,step);v(:,step);a(:,step)];
- y=H*x +mpert(step);
-    x_pred =F*x+B*f_k;
+
     % --- Mémorisation de l'erreur précédente ---
     % Store previous error
     prev_e = e;
 end
-
-
-
 
 %% Plot some stuff
 figure; hold on;
