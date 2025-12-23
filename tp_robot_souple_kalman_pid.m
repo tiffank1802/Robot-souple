@@ -58,9 +58,9 @@ mpert = generateNoiseTemporal( time0, 1, r, vseed2, isMatlab ); % Measure pertur
 
 %% Operators and BCs
 % fA=sin(2*pi*time0/T);
-% fA = zeros(1,size(time0,2));
-% fA(floor(end/10):end)=1;
-fA=Heaviside(time0);
+fA = zeros(1,size(time0,2));
+fA(floor(end/10):end)=1;
+% fA=Heaviside(time0);
 
 %%
 ffull = zeros(ndof,nstep+1);
@@ -88,91 +88,79 @@ v(:,1) = v0;
 f=zeros(2*nx,length(time0));
 %%
 % Better PID implementation with proper initialization
-% iepsilon_t = 0;
-% epsilon_prev = 0;
-% 
-% for step = 2:nstep+1
-%     % Measurement with noise
-%     ub_t = u(induB,step-1) ;
-% 
-%     % Reference signal (step input)
-%     e_t = 1; % Heaviside step function
-% 
-%     % Error calculation
-%     epsilon_t = e_t - ub_t;
-% 
-%     % Derivative (backward difference)
-%     if step > 2
-%         depsilon_t = (epsilon_t - epsilon_prev)/delta;
-%     else
-%         depsilon_t = 0;
-%     end
-% 
-%     % Integral
-%     iepsilon_t = iepsilon_t + delta * epsilon_t;
-% 
-%     % PID control
-%     fA = Kp*epsilon_t + Ki*iepsilon_t + Kd*depsilon_t + fpert(step);
-% 
-%     % Update force vector
-%     f(induA,step) = fA;
-% 
-%     % Store previous error
-%     epsilon_prev = epsilon_t;
-% 
-%     % Newmark integration
-%     [u(:,step), v(:,step), a(:,step)] = newmark1stepMRHS(...
-%         M, C, K, f(:,step), u(:,step-1), v(:,step-1), a(:,step-1), delta, beta, gamma);
-% end
-
 
 %%
 B=Bconstruct(M,C,K,nA,delta,beta,gamma);
 %%
 F=Fconstruct(M,C,K,delta,beta,gamma);
-H=zeros(nx,1);
-H(1,1)=1;
+H=zeros(1,3*ndo1); H(induA)=1; % Measure u_A instead of u_B
 %%
-
+%
 % PID memory
 integ_e = 0;
-prev_e  = 0;
 t0=1.0;
 u_ref = double(time0 >= t0);
 
+x=[u;v;a];
+P=zeros(3*ndo1,3*ndo1);
+Q=q*B*B';
+R=r;
+sigma_u = [];
+sigma_u = [sigma_u zeros(3*ndo1,1)];
+
 for step = 2:nstep+1
-    % --- Mesure sans bruit ---
-    uB_meas = u(induB, step-1)+mpert(step);
-    
+    % --- Mesure bruitée ---
+    y = H * x + mpert(step); % Measure estimated u_B + noise
+
+    % Kalman Prediction
+    f_k = zeros(ndo1,1); % Will be set by PID
+    x_pred = F * x + B * f_k;
+    P_pred = F * P * F' + Q;
+
+    % Kalman Update
+    innov = y - H * x_pred;
+    S = H * P_pred * H' + R;
+    K_kalman = P_pred * H' / S;
+    x = x_pred + K_kalman * innov;
+    P = (eye(3*ndo1) - K_kalman * H) * P_pred;
+
+    % Extract estimated u_B and v_B
+    uB_est = x(induB);
+    vB_est = x(ndo1 + induB);
+
     % --- Erreur ---
-    e = u_ref(step) - uB_meas;
-    integ_e = integ_e + e*delta;
-    de = (e - prev_e)/delta;
+    e = u_ref(step) - uB_est;
+    integ_e = integ_e + e * delta;
+
+    % Derivative using estimated velocity (v_ref = 0 for step reference)
+    de = vB_est;
 
     % --- Commande PID ---
-    Fpid = Kp*e + Ki*integ_e + Kd*de;
+    Fpid = Kp * e + Ki * integ_e + Kd * de;
 
     % --- Force appliquée ---
     f_k = zeros(ndo1,1);
-    f_k(induB) = Fpid;              % commande PID au point B
-    % f_k(induA) = f_k(induA) + fpert(step); % perturbation externe au point A
-    % --- Prediction state ---
-    x=[u(:,step-1);v(:,step-1);a(:,step-1)];
-    x_pred =F*x+B*f_k;
-    u(:,step-1) = x_pred(1:ndo1);
-    v(:,step-1) = x_pred(ndo1+1:2*ndo1);
-    a(:,step-1) = x_pred(2*ndo1+1:end);
+    f_k(induA) = Fpid + fpert(step); % PID at A + perturbation
 
-    % Newmark integration
+    % Newmark integration with control
     [u(:,step), v(:,step), a(:,step)] = newmark1stepMRHS(...
         M, C, K, f_k, u(:,step-1), v(:,step-1), a(:,step-1), delta, beta, gamma);
 
-    % --- Mémorisation de l'erreur précédente ---
-    % Store previous error
-    prev_e = e;
+    % Update state for next Kalman prediction
+    x = [u(:,step); v(:,step); a(:,step)];
+
+    % Uncertainty
+    sigma = sqrt(diag(P));
+    sigma_u = [sigma_u sigma];
 end
 
+
+
+
 %% Plot some stuff
+% sigma_u = sigma(1:ndo1);
+uPSigma = u + sigma_u(1:ndo1,:);
+uMSigma = u - sigma_u(1:ndo1,:);
 figure; hold on;
 plot(ixe, u(1:2:end-1,end),'Color','blue','linewidth',3);
 plot(ixe, u(2:2:end,end)  ,'Color','red','linewidth',3);
@@ -184,8 +172,11 @@ set(h,'FontSize',16);
 figure; hold on;
 plot(time0, u(induB,:),'Color','blue','linewidth',3);
 plot(time0, u_ref,'Color','red','linewidth',3);
-h = legend('u','u_ref'); title('U_{time}');
-xlabel('t'); ylabel('v');
+plot(time0, uPSigma(induB,:), '--k','linewidth',2);
+plot(time0, uMSigma(induB,:),'--g','linewidth',2);
+
+h = legend('u_{tip}','u_{ref}','u_{tip}+\sigma','u_{tip}-\sigma'); title('Tip displacement over time with Kalman-based PID');
+xlabel('Time (s)'); ylabel('Displacement (m)');
 set(gca,'FontSize',16);
 set(h,'FontSize',16);
 

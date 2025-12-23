@@ -35,11 +35,12 @@ function [fop, ress] = forthodir( m, c, k, co, u0, v0, niter, nopt, stagEps, del
    resv = rhs; % Initialization = 0
    res0 = norm(resv);
    
-   % Test to avoid singularity
-   if res0 < stagEps
-      disp('zero seems to be the optimal solution');
-      return;
-   end
+    % Test to avoid singularity
+    if res0 < stagEps
+       disp('zero seems to be the optimal solution');
+       ress = [];
+       return;
+    end
 
    % Loop
    if picture, h = waitbar( 0, 'Optimization' ); end

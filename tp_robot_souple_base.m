@@ -25,7 +25,7 @@ rho   = 2700e-9; % Mass
 cy    = 1e-4; % Damping coefficient % TODO: see if we keep that
 nx    = 10; % total nb of beam elements
 nA    = floor(nx/2);%floor(9*nx/10); % nb of beam elements to point A (watch out nx has to be multiple of 2)
-% nA    =floor(nx);
+nA    =floor(nx);
 
 
 S  = a*b;   % Section
@@ -58,9 +58,9 @@ mpert = generateNoiseTemporal( time0, 1, r, vseed2, isMatlab ); % Measure pertur
 
 %% Operators and BCs
 % fA=sin(2*pi*time0/T);
-% fA = zeros(1,size(time0,2));
-% fA(floor(end/10):end)=1;
-fA=Heaviside(time0);
+fA = zeros(1,size(time0,2));
+fA(floor(end/10):end)=1;
+% fA=Heaviside(time0);
 
 %%
 ffull = zeros(ndof,nstep+1);
@@ -69,6 +69,7 @@ K = Kfull; K(:,[1,2]) = []; K([1,2],:) = [];
 C = Cfull; C(:,[1,2]) = []; C([1,2],:) = [];
 M = Mfull; M(:,[1,2]) = []; M([1,2],:) = [];
 f = ffull; f([1,2],:) = [];
+f(induA,:)=fA;
 f(induA,:) = fA+ fpert' ; % Add perturbation here if wanted
 
 % Initial conditions
@@ -85,28 +86,26 @@ a0 = M \ (f(:,1)-C*v0-K*u0); % initial acceleration
 a(:,1) = a0;
 u(:,1) = u0;
 v(:,1) = v0;
-f=zeros(2*nx,length(time0));
+% f=zeros(2*nx,length(time0));
 %%
 % Better PID implementation with proper initialization
 
-%%
-B=Bconstruct(M,C,K,nA,delta,beta,gamma);
-%%
-F=Fconstruct(M,C,K,delta,beta,gamma);
-H=zeros(1,3*ndo1); H(induB)=1;
-H(1,1)=1;
-%%
+
+
 
 % PID memory
 integ_e = 0;
 prev_e  = 0;
 t0=1.0;
 u_ref = double(time0 >= t0);
+e_set=[0];
 
 for step = 2:nstep+1
-    % --- Mesure sans bruit ---
-    uB_meas = u(induB, step-1)+mpert(step);
+    % % --- Mesure sans bruit ---
+    uB_meas = u(induB, step-1);
     
+    uB_meas = u(induB, step-1)+mpert(step);
+
     % --- Erreur ---
     e = u_ref(step) - uB_meas;
     integ_e = integ_e + e*delta;
@@ -115,35 +114,24 @@ for step = 2:nstep+1
     % --- Commande PID ---
     Fpid = Kp*e + Ki*integ_e + Kd*de;
 
-    % --- Force appliquée ---
+    % % --- Force appliquée ---
     f_k = zeros(ndo1,1);
-    f_k(induB) = Fpid;              % commande PID au point B
-    % f_k(induA) = f_k(induA) + fpert(step); % perturbation externe au point A
-    % --- Prediction state ---
-    x=[u(:,step-1);v(:,step-1);a(:,step-1)];
-    x_pred =F*x+B*f_k;
-    u(:,step-1) = x_pred(1:ndo1);
-    v(:,step-1) = x_pred(ndo1+1:2*ndo1);
-    a(:,step-1) = x_pred(2*ndo1+1:end);
-   % --- Update force vector with perturbation ---
-f_k(induA) = f_k(induA) + fpert(step); % Add perturbation at point A
-    
+    f_k(induA) = Fpid;              % commande PID au point A
+    f_k(induA) = f_k(induA) + fpert(step); % Add perturbation at point A
+
     % Newmark integration
     [u(:,step), v(:,step), a(:,step)] = newmark1stepMRHS(...
         M, C, K, f_k, u(:,step-1), v(:,step-1), a(:,step-1), delta, beta, gamma);
-    
- x=[u(:,step);v(:,step);a(:,step)];
- y=H*x +mpert(step);
-    x_pred =F*x+B*f_k;
-    % --- Mémorisation de l'erreur précédente ---
+
+
+    % % --- Mémorisation de l'erreur précédente ---
     % Store previous error
     prev_e = e;
+    e_set=[e_set e];
 end
 
-
-
-
 %% Plot some stuff
+
 figure; hold on;
 plot(ixe, u(1:2:end-1,end),'Color','blue','linewidth',3);
 plot(ixe, u(2:2:end,end)  ,'Color','red','linewidth',3);
@@ -154,9 +142,13 @@ set(h,'FontSize',16);
 
 figure; hold on;
 plot(time0, u(induB,:),'Color','blue','linewidth',3);
-plot(time0, u_ref,'Color','red','linewidth',3);
-h = legend('u','u_ref'); title('U_{time}');
-xlabel('t'); ylabel('v');
+plot(time0, fA,'Color','red','linewidth',3);
+
+% plot(time0, e_set,'--m','linewidth',2);
+
+
+h = legend('u_{tip}','u_{ref}'); title('Tip displacement over time');
+xlabel('Time (s)'); ylabel('Displacement (m)');
 set(gca,'FontSize',16);
 set(h,'FontSize',16);
 
