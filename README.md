@@ -1,4 +1,4 @@
-# TONGUE_KEVIN_JN — Project README ✅
+# ROBOT-SOUPLE— Project README ✅
 
 ## Overview
 **Purpose:** This repository contains MATLAB/Octave code for numerical simulation and control experiments on flexible / beam-like systems and a set of example scripts for a soft-robot ("robot souple") case study. The codebase focuses on assembling finite-element style system matrices, time-integration with Newmark methods, Heaviside-based excitation functions, temporal noise generation, and controller/estimation experiments.
