@@ -63,18 +63,3 @@ Other:
 - Compare results across `Newmark` variants (`newmark1stepMRHS.m`, `Newmark2N.m`, and files in `old/`) to validate integrator behavior.
 
 ---
-
-## Next steps & suggestions 💡
-- Add a short `run_all.m` or `examples/` folder with concise example scripts that produce plots and simple result comparisons.
-- Add documentation headers to functions that don't have clear comments (inputs/outputs, units, assumptions).
-- Optionally add unit tests (a simple script that verifies energy behavior, or convergence with decreasing dt).
-
----
-
-## License & Contribution
-- Add a `LICENSE` file if you plan to publish or share the repository.
-- If you'd like, I can add a short `CONTRIBUTING.md` and some example runs / plots.
-
----
-
-If you'd like, I can: (1) refine the file descriptions by reading top-of-file comments and adding precise inputs/outputs, or (2) add a `run_examples.m` script that demonstrates the main workflows. Which would you prefer? 
